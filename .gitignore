@@ -29,3 +29,6 @@ node_modules
 
 # Optional npm cache directory
 .npm
+
+# Custom config file
+config/config.json
