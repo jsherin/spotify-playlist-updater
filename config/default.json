@@ -1,0 +1,10 @@
+{
+  "spotifyApiUrl": "https://api.spotify.com/v1/",
+  "spotifyAuthApiUrl": "https://accounts.spotify.com/api/token",
+  "market": "US",
+  "userId": "",
+  "playlistId": "",
+  "clientId": "",
+  "clientSecret": "",
+  "refreshToken": ""
+}
