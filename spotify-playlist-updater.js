@@ -10,6 +10,8 @@ var config = nconf
   .file('config/default.json')
   .get();
 
+var MAX_RESULTS = 100;
+
 function SpotifyPlaylistUpdater() {}
 
 SpotifyPlaylistUpdater.prototype.requestAccessToken = function(cb) {
@@ -33,79 +35,59 @@ SpotifyPlaylistUpdater.prototype.requestAccessToken = function(cb) {
   });
 };
 
-SpotifyPlaylistUpdater.prototype.requestPlaylistSize = function(accessToken, cb) {
-  var options = {
-    headers: {
-      'Authorization': 'Bearer ' + accessToken
-    },
-    json: true
-  };
+SpotifyPlaylistUpdater.prototype.requestCurrentTracks = function(accessToken, cb) {
+  var currentTracks = [];
+  var numTracks = 0;
+  var offset = 0;
 
   var url = config.spotifyApiUrl + 'users/' + config.userId + '/playlists/' + config.playlistId + '/tracks';
-  request.get(url, options, function (error, response, body) {
-    if (error || response.statusCode !== 200) {
-      console.log(error || response);
-      cb(error || response);
-    } else {
-      cb(null, body.total);
-    }
-  });
-}
+  async.doWhilst(function(cb) {
+    var options = {
+      headers: {
+        'Authorization': 'Bearer ' + accessToken
+      },
+      qs: {
+        offset: offset
+      },
+      json: true
+    };
 
-SpotifyPlaylistUpdater.prototype.requestCurrentTracks = function(accessToken, playlistSize, cb) {
-  if (playlistSize > 0) {
-    var numRequestsLeft = Math.floor(playlistSize / 100) + 1;
-    var offsets = [];
-    for (var i = 0; i < numRequestsLeft; i++) {
-      offsets.push(i * 100)
-    }
-
-    async.mapSeries(offsets, function(offset, cb) {
-      var options = {
-        headers: {
-          'Authorization': 'Bearer ' + accessToken
-        },
-        qs: {
-          offset: offset
-        },
-        json: true
-      };
-
-      var url = config.spotifyApiUrl + 'users/' + config.userId + '/playlists/' + config.playlistId + '/tracks';
-      request.get(url, options, function (error, response, body) {
-        if (error || response.statusCode !== 200) {
-          console.log(error || response);
-          cb(error || response);
-        } else {
-          var newTracks = body.items.map(function(item) {
-            return {
-              id: item.track.id,
-              name: item.track.name
-            }
-          });
-          cb(null, newTracks);
-        }
-      });
-    }, function(error, results) {
-      if (error) {
-        cb(error);
+    request.get(url, options, function (error, response, body) {
+      if (error || response.statusCode !== 200) {
+        console.log(error || response);
+        cb(error || response);
       } else {
-        cb(null, [].concat.apply([], results));
+        numTracks = body.total;
+        var newTracks = body.items.map(function(item) {
+          return {
+            id: item.track.id,
+            name: item.track.name
+          }
+        });
+        currentTracks = currentTracks.concat(newTracks);
+        offset += MAX_RESULTS;
+        cb();
       }
     });
-  } else {
-    cb(null, []);
-  }
+  }, function() {
+    return numTracks - currentTracks.length > 0
+  }, function(error) {
+    if (error) {
+      cb(error);
+    } else {
+      cb(null, currentTracks);
+    }
+  });
 };
 
-SpotifyPlaylistUpdater.prototype.requestSongList = function(trackNameSet, cb) {
+SpotifyPlaylistUpdater.prototype.requestThePeakSongList = function(trackNameSet, cb) {
   var url = 'http://www.thepeak.fm/BroadcastHistory.aspx';
   request.get(url, {}, function (error, response, body) {
+    var songList = [];
+
     if (error || response.statusCode !== 200) {
       console.log(error || response);
-      cb(error || response);
     } else {
-      var songList = [];
       var $ = cheerio.load(body);
       $('.broadcast span').each(function() {
         var song = $(this).text().replace(/"/g, "").trim();
@@ -116,11 +98,53 @@ SpotifyPlaylistUpdater.prototype.requestSongList = function(trackNameSet, cb) {
         }
 
         if (!trackNameSet[songObj.name.toLowerCase()]) {
+          trackNameSet[songObj.name.toLowerCase()] = songObj.name.toLowerCase();
           songList.push(songObj);
         }
       });
-      cb(null, songList);
     }
+
+    cb(null, songList);
+  });
+};
+
+SpotifyPlaylistUpdater.prototype.requestTheEndSongList = function(trackNameSet, cb) {
+  var until = new Date().toISOString();
+  var since = new Date(new Date().getTime() - 86400000).toISOString();
+  var url = 'http://kndd.tunegenie.com/api/v1/brand/nowplaying/?apiid=entercom&since=' + since + '&until=' + until;
+  request.get(url, { json: true }, function (error, response, body) {
+    var songList = [];
+
+    if (error || response.statusCode !== 200) {
+      console.log(error || response);
+    } else {
+      body.response.forEach(function(item) {
+        if (!trackNameSet[item.song.toLowerCase()]) {
+          trackNameSet[item.song.toLowerCase()] = item.song.toLowerCase();
+          songList.push({
+            name: item.song,
+            artist: item.artist
+          });
+        }
+      });
+    }
+
+    cb(null, songList);
+  });
+};
+
+SpotifyPlaylistUpdater.prototype.requestSongList = function(trackNameSet, cb) {
+  var _this = this;
+  async.series([
+    function(cb){
+      _this.requestThePeakSongList(trackNameSet, cb);
+    },
+    function(cb){
+      _this.requestTheEndSongList(trackNameSet, cb)
+    }
+  ],
+  function(err, songLists){
+    cb(null, [].concat.apply([], songLists))
   });
 };
 
@@ -160,49 +184,46 @@ SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet
   },
   function(err, results) {
     // remove tracks that are not found
-    var uris = results.filter(function(value) {
-      return value;
+    var uris = results.filter(function(uri) {
+      return uri;
     });
     cb(null, uris);
   });
 };
 
 SpotifyPlaylistUpdater.prototype.addToPlaylist = function(uris, accessToken, cb) {
-  if (uris.length > 0) {
-    var splitUris = [];
-    while (uris.length > 0) {
-      splitUris.push(uris.splice(0, 100));
-    }
+  var numAdded = 0;
 
-    var url = config.spotifyApiUrl + 'users/' + config.userId + '/playlists/' + config.playlistId + '/tracks';
-    async.eachSeries(splitUris, function(uriArray, cb) { 
-      var options = {
-        headers: {
-          'Authorization': 'Bearer ' + accessToken
-        },
-        json: true,
-        body: {
-          uris: uriArray
-        }
-      };
+  var url = config.spotifyApiUrl + 'users/' + config.userId + '/playlists/' + config.playlistId + '/tracks';
+  async.whilst(function() {
+    return uris.length > 0;
+  }, function(cb) {
+    var urisToAdd = uris.splice(0, MAX_RESULTS);
 
-      request.post(url, options, function (error, response, body) {
-        if (error || response.statusCode !== 201) {
-          console.log(error || response);
-        } else {
-          console.log(uriArray.length + ' songs added');
-        }
+    var options = {
+      headers: {
+        'Authorization': 'Bearer ' + accessToken
+      },
+      json: true,
+      body: {
+        uris: urisToAdd
+      }
+    };
 
-        cb();
-      });
-    },
-    function(err) {
+    request.post(url, options, function (error, response, body) {
+      if (error || response.statusCode !== 201) {
+        console.log(error || response);
+      } else {
+        numAdded += urisToAdd.length;
+      }
+
       cb();
     });
-  } else {
-    console.log('0 songs added');
+  },
+  function(err) {
+    console.log(numAdded + ' songs added');
     cb();
-  }
+  });
 };
 
 SpotifyPlaylistUpdater.prototype.updatePlaylist = function(newSongs, cb) {
@@ -217,10 +238,7 @@ SpotifyPlaylistUpdater.prototype.updatePlaylist = function(newSongs, cb) {
     },
     function(token, cb) {
       accessToken = token;
-      _this.requestPlaylistSize(accessToken, cb);
-    },
-    function(playlistSize, cb) {
-      _this.requestCurrentTracks(accessToken, playlistSize, cb);
+      _this.requestCurrentTracks(accessToken, cb);
     },
     function(tracks, cb) {
       for (var i = 0; i < tracks.length; i++) {

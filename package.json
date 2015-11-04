@@ -1,7 +1,7 @@
 {
   "name": "spotify-playlist-updater",
   "version": "1.0.0",
-  "description": "Updates a spotify playlist from a list of songs or from 102.7 The Peak website",
+  "description": "Updates a spotify playlist by retrieving a song list from multiple sources (currently 102.7 The Peak and 107.7 The End)",
   "main": "index.js",
   "directories": {
     "test": "test"
