@@ -93,8 +93,8 @@ SpotifyPlaylistUpdater.prototype.requestThePeakSongList = function(trackNameSet,
         var song = $(this).text().replace(/"/g, "").trim();
 
         var songObj = {
-          name: song.split('-')[0].trim(),
-          artist: song.split('-')[1].trim()
+          name: song.split(' - ')[0].trim(),
+          artist: song.split(' - ')[1].trim()
         }
 
         if (!trackNameSet[songObj.name.toLowerCase()]) {
