@@ -148,7 +148,20 @@ SpotifyPlaylistUpdater.prototype.requestSongList = function(trackNameSet, cb) {
   });
 };
 
+SpotifyPlaylistUpdater.prototype.sanitizeStringForSearch = function(s) {
+  s = s.replace(/\(.*/g, '');
+  s = s.replace(/\/.*/g, '');
+  s = s.replace(/(ftr).*/g, '');
+  s = s.replace(/(feat).*/g, '');
+  s = s.replace(/(FTR).*/g, '');
+  s = s.replace(/(FEAT).*/g, '');
+  s = s.replace(/[&+]/g, '');
+
+  return s;
+};
+
 SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet, accessToken, cb) {
+  var _this = this;
   async.mapSeries(songList, function(item, cb) {
     var options = {
       headers: {
@@ -156,7 +169,7 @@ SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet
       },
       json: true,
       qs: {
-        q: 'artist:' + item.artist + ' track:' + item.name,
+        q: 'artist:' + _this.sanitizeStringForSearch(item.artist) + ' track:' + _this.sanitizeStringForSearch(item.name),
         type: 'track',
         market: config.market,
         limit: 1
