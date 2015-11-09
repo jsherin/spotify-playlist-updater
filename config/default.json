@@ -6,5 +6,6 @@
   "playlistId": "",
   "clientId": "",
   "clientSecret": "",
-  "refreshToken": ""
+  "refreshToken": "",
+  "removeAfterAddedMs": null
 }

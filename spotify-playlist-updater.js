@@ -37,6 +37,7 @@ SpotifyPlaylistUpdater.prototype.requestAccessToken = function(cb) {
 
 SpotifyPlaylistUpdater.prototype.requestCurrentTracks = function(accessToken, cb) {
   var currentTracks = [];
+  var tracksToRemove = [];
   var numTracks = 0;
   var offset = 0;
 
@@ -58,25 +59,65 @@ SpotifyPlaylistUpdater.prototype.requestCurrentTracks = function(accessToken, cb
         cb(error || response);
       } else {
         numTracks = body.total;
-        var newTracks = body.items.map(function(item) {
-          return {
-            id: item.track.id,
-            name: item.track.name
+        body.items.forEach(function(item) {
+          var toRemove = false;
+          if (parseInt(config.removeAfterAddedMs) >= 0 && 
+              (new Date().getTime() - config.removeAfterAddedMs > new Date(item.added_at).getTime())) {
+            tracksToRemove.push( { uri: item.track.uri }); 
+          } else {
+            currentTracks.push({
+              id: item.track.id,
+              name: item.track.name,
+            });
           }
         });
-        currentTracks = currentTracks.concat(newTracks);
         offset += MAX_RESULTS;
         cb();
       }
     });
   }, function() {
-    return numTracks - currentTracks.length > 0
+    return numTracks - currentTracks.length - tracksToRemove.length > 0
   }, function(error) {
     if (error) {
       cb(error);
     } else {
-      cb(null, currentTracks);
+      cb(null, currentTracks, tracksToRemove);
     }
+  });
+};
+
+SpotifyPlaylistUpdater.prototype.removeOldTracksFromPlaylist = function(accessToken, tracksToRemove, cb) {
+  var numRemoved = 0;
+
+  var url = config.spotifyApiUrl + 'users/' + config.userId + '/playlists/' + config.playlistId + '/tracks';
+  async.whilst(function() {
+    return tracksToRemove.length > 0;
+  }, function(cb) {
+    var urisToRemove = tracksToRemove.splice(0, MAX_RESULTS);
+
+    var options = {
+      headers: {
+        'Authorization': 'Bearer ' + accessToken
+      },
+      json: true,
+      body: {
+        tracks: urisToRemove
+      }
+    };
+
+    request.del(url, options, function (error, response, body) {
+      if (error || response.statusCode !== 200) {
+        console.log(error || response);
+      } else {
+        numRemoved += urisToRemove.length;
+      }
+
+      cb();
+    });
+  },
+  function(err) {
+    console.log(numRemoved + ' songs removed');
+    cb();
   });
 };
 
@@ -253,12 +294,15 @@ SpotifyPlaylistUpdater.prototype.updatePlaylist = function(newSongs, cb) {
       accessToken = token;
       _this.requestCurrentTracks(accessToken, cb);
     },
-    function(tracks, cb) {
+    function(tracks, tracksToRemove, cb) {
       for (var i = 0; i < tracks.length; i++) {
         trackIdSet[tracks[i].id] = tracks[i].id;
         trackNameSet[tracks[i].name.toLowerCase()] = tracks[i].name.toLowerCase();
       }
 
+      _this.removeOldTracksFromPlaylist(accessToken, tracksToRemove, cb);
+    },
+    function(cb) {
       if (newSongs) {
         cb(null, newSongs)
       } else {
