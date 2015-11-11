@@ -176,14 +176,19 @@ SpotifyPlaylistUpdater.prototype.requestTheEndSongList = function(trackNameSet, 
 
 SpotifyPlaylistUpdater.prototype.requestSongList = function(trackNameSet, cb) {
   var _this = this;
-  async.series([
-    function(cb){
-      _this.requestThePeakSongList(trackNameSet, cb);
-    },
-    function(cb){
-      _this.requestTheEndSongList(trackNameSet, cb)
+
+  async.mapSeries(config.sources, function (source, cb) {
+    switch(source) {
+      case 'thepeak':
+        _this.requestThePeakSongList(trackNameSet, cb);
+        break;
+      case 'theend':
+        _this.requestTheEndSongList(trackNameSet, cb);
+        break;
+      default:
+        cb([]);
     }
-  ],
+  },
   function(err, songLists){
     cb(null, [].concat.apply([], songLists))
   });

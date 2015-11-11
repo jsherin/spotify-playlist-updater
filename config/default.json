@@ -7,5 +7,6 @@
   "clientId": "",
   "clientSecret": "",
   "refreshToken": "",
-  "removeAfterAddedMs": null
+  "removeAfterAddedMs": null,
+  "sources": ["thepeak", "theend"]
 }
