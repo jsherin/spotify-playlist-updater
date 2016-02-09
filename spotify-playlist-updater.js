@@ -203,7 +203,7 @@ SpotifyPlaylistUpdater.prototype.sanitizeStringForSearch = function(s) {
   s = s.replace(/(FEAT).*/g, '');
   s = s.replace(/[&+]/g, '');
 
-  return s;
+  return s.toLowerCase();
 };
 
 SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet, accessToken, cb) {
@@ -235,7 +235,7 @@ SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet
             cb();
           } else {
             trackIdSet[song.id] = song.id;
-            cb(null, song.uri);
+            cb(null, song);
           }
         }
       }
@@ -243,6 +243,42 @@ SpotifyPlaylistUpdater.prototype.searchForTracks = function(songList, trackIdSet
   },
   function(err, results) {
     // remove tracks that are not found
+    var songs = results.filter(function(song) {
+      return song;
+    });
+    cb(null, songs);
+  });
+};
+
+SpotifyPlaylistUpdater.prototype.filterByDate = function(songs, accessToken, cb) {
+  var _this = this;
+  async.mapSeries(songs, function(song, cb) {
+    if (config.releasedAfter && song.album) {
+      var options = {
+        headers: {
+          'Authorization': 'Bearer ' + accessToken
+        },
+        json: true
+      };
+
+      request.get(config.spotifyApiUrl + 'albums/' + song.album.id, options, function (error, response, body) {
+        if (error || response.statusCode !== 200) {
+          console.log(error || response);
+          cb();
+        } else {
+          if (!body.release_date ||
+              (new Date(body.release_date).getTime() > new Date(config.releasedAfter).getTime())) {
+            cb(null, song.uri);
+          } else {
+            cb();
+          }
+        }
+      });
+    } else {
+      cb(null, song.uri);
+    }
+  },
+  function(err, results) {
     var uris = results.filter(function(uri) {
       return uri;
     });
@@ -316,6 +352,9 @@ SpotifyPlaylistUpdater.prototype.updatePlaylist = function(newSongs, cb) {
     },
     function(songList, cb) {
       _this.searchForTracks(songList, trackIdSet, accessToken, cb);
+    },
+    function(songs, cb) {
+      _this.filterByDate(songs, accessToken, cb);
     },
     function(uris, cb) {
       _this.addToPlaylist(uris, accessToken, cb);

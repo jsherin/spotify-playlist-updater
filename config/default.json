@@ -8,5 +8,6 @@
   "clientSecret": "",
   "refreshToken": "",
   "removeAfterAddedMs": null,
-  "sources": ["thepeak", "theend"]
+  "sources": ["thepeak", "theend"],
+  "releasedAfter": null
 }
