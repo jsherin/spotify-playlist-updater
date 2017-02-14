@@ -2,7 +2,6 @@
 
 var request = require('request');
 var async = require('async');
-var cheerio = require('cheerio');
 var nconf = require('nconf');
 
 var config = nconf
@@ -122,25 +121,20 @@ SpotifyPlaylistUpdater.prototype.removeOldTracksFromPlaylist = function(accessTo
 };
 
 SpotifyPlaylistUpdater.prototype.requestThePeakSongList = function(trackNameSet, cb) {
-  var url = 'http://www.thepeak.fm/BroadcastHistory.aspx';
-  request.get(url, {}, function (error, response, body) {
+  var url = 'http://www.thepeak.fm/api/v1/music/broadcastHistory?accountID=610';
+  request.get(url, { json: true }, function (error, response, body) {
     var songList = [];
 
     if (error || response.statusCode !== 200) {
       console.log(error || response);
     } else {
-      var $ = cheerio.load(body);
-      $('.broadcast span').each(function() {
-        var song = $(this).text().replace(/"/g, "").trim();
-
-        var songObj = {
-          name: song.split(' - ')[0].trim(),
-          artist: song.split(' - ')[1].trim()
-        }
-
-        if (!trackNameSet[songObj.name.toLowerCase()]) {
-          trackNameSet[songObj.name.toLowerCase()] = songObj.name.toLowerCase();
-          songList.push(songObj);
+      body.data.songs.forEach(function(item) {
+        if (!trackNameSet[item.song_name.toLowerCase()]) {
+          trackNameSet[item.song_name.toLowerCase()] = item.song_name.toLowerCase();
+          songList.push({
+            name: item.song_name,
+            artist: item.artist_name
+          });
         }
       });
     }
