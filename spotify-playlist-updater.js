@@ -121,7 +121,7 @@ SpotifyPlaylistUpdater.prototype.removeOldTracksFromPlaylist = function(accessTo
 };
 
 SpotifyPlaylistUpdater.prototype.requestThePeakSongList = function(trackNameSet, cb) {
-  var url = 'http://www.thepeak.fm/api/v1/music/broadcastHistory?accountID=610';
+  var url = 'https://www.thepeak.fm/api/v1/music/broadcastHistory?accountID=610';
   request.get(url, { json: true }, function (error, response, body) {
     var songList = [];
 
